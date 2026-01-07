@@ -354,20 +354,69 @@
             .container {
                 padding: 15px;
             }
+            .training-info {
+                font-size: 18px;
+            }
+            .instruction-text {
+                font-size: 16px;
+            }
+            .prompt-text {
+                font-size: 22px;
+            }
             .response-button {
                 width: 100px;
                 height: 100px;
-                font-size: 16px;
+                font-size: 18px;
                 margin: 8px 10px;
+            }
+            .control-button {
+                font-size: 20px;
+                padding: 12px 24px;
+            }
+            .status {
+                font-size: 20px;
+                width: 90%;
+            }
+            .debug-info {
+                font-size: 14px;
+            }
+            .result-heading {
+                font-size: 22px;
+            }
+            .result-table th, .result-table td {
+                font-size: 14px;
+                padding: 8px;
+            }
+            .auxiliary-buttons button {
+                font-size: 14px;
+            }
+            .experiment-progress {
+                font-size: 18px;
             }
         }
         
         @media (max-width: 600px) {
+            .training-info {
+                font-size: 16px;
+            }
+            .instruction-text {
+                font-size: 14px;
+            }
+            .prompt-text {
+                font-size: 20px;
+            }
             .response-button {
                 width: 80px;
                 height: 80px;
-                font-size: 14px;
+                font-size: 16px;
                 margin: 5px 8px;
+            }
+            .control-button {
+                font-size: 18px;
+                padding: 10px 20px;
+            }
+            .status {
+                font-size: 18px;
             }
         }
         
@@ -1184,12 +1233,7 @@ function calculateResults() {
         logDebug("Preparing to send experiment results via email...");
         
         setTimeout(function() {
-            if (typeof sendCurrentExperimentResults === 'function') {
-                sendCurrentExperimentResults();
-                logDebug("Email sending initiated");
-            } else {
-                logDebug("Warning: Email service not available. Please check if emailService.js is loaded.");
-            }
+            sendFallingMidExperimentResults();
         }, 1000);
     } else {
         logDebug("Email already sent, skipping duplicate send");
@@ -1729,6 +1773,75 @@ function changeLevel(whichWay) {
              (whichWay == DECREASING ? "(increasing difficulty)" : "(decreasing difficulty)"));
 }
 
+function sendFallingMidExperimentResults() {
+    logDebug("Preparing Mid Falling experiment results for email...");
+    
+    if (typeof emailjs === 'undefined') {
+        logDebug("Error: EmailJS library not loaded");
+        alert('EmailJS庫未加載！請檢查網絡連接。');
+        return;
+    }
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
+    const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
+    
+    // 使用 generateFullCSVContent 生成完整的CSV内容
+    const csvContent = generateFullCSVContent();
+    
+    const BOM = '\uFEFF';
+    const contentWithBOM = BOM + csvContent;
+    const csvBase64 = btoa(unescape(encodeURIComponent(contentWithBOM)));
+    
+    const fileName = participantId + "_" + sessionNumber + "_Falling_ABCX.csv";
+    
+    const rtStats = calculateReactionTimeStats();
+    const accuracyStats = calculateAccuracyStats();
+    
+    let resultsSummary = "Mid Falling Tone Discrimination Results:\n";
+    if (NumberOfReversals >= MINIMUMREVERSALS) {
+        resultsSummary += "- JND: " + jndAbsoluteDifference.toFixed(2) + " ms\n";
+        resultsSummary += "- Threshold: " + thresholdWindowPercent.toFixed(2) + "% (" + thresholdWindowDuration.toFixed(2) + " ms)\n";
+    }
+    resultsSummary += "- Accuracy: " + accuracyStats.percentage + "%\n";
+    resultsSummary += "- Mean RT: " + rtStats.mean + " ms";
+    
+    const templateParams = {
+        participant_id: participantId,
+        session_number: sessionNumber,
+        experiment_type: "Mid Falling Tone Discrimination (ABCX)",
+        start_time: window.experimentStartTime || localStorage.getItem('experimentStartTime') || 'N/A',
+        completion_date: new Date().toLocaleString('zh-CN'),
+        total_trials: trialRecords.length,
+        total_reversals: NumberOfReversals,
+        jnd_value: NumberOfReversals >= MINIMUMREVERSALS ? 
+            jndAbsoluteDifference.toFixed(2) + " ms" : "N/A",
+        accuracy: accuracyStats.percentage + "%",
+        mean_rt: rtStats.mean + " ms",
+        attachment_name: fileName,
+        attachment_content: csvBase64,
+        results_summary: resultsSummary
+    };
+    
+    const serviceId = (typeof EMAIL_CONFIG !== 'undefined' && EMAIL_CONFIG.serviceId) || 'service_exe9d5a';
+    const templateId = (typeof EMAIL_CONFIG !== 'undefined' && EMAIL_CONFIG.templateId) || 'template_4c3g3ss';
+    
+    emailjs.send(serviceId, templateId, templateParams)
+        .then(function(response) {
+            logDebug("Email sent successfully! Status: " + response.status);
+            alert('实验结果已成功发送到指定邮箱！');
+            
+            // 检查是否需要跳转到下一个实验
+            if (typeof checkAndNavigateToNextExperiment === 'function') {
+                checkAndNavigateToNextExperiment();
+            }
+        })
+        .catch(function(error) {
+            logDebug("Email failed: " + error);
+            alert('发送邮件失败：' + error.text + '\n请检查网络连接或联系管理员。');
+        });
+}
+
 function testEmailSending() {
     logDebug("Testing email sending functionality...");
     
@@ -1779,7 +1892,7 @@ function testEmailSending() {
         const csvContent = csvRows.join("\n");
         const BOM = '\uFEFF';
         const csvBase64 = btoa(unescape(encodeURIComponent(BOM + csvContent)));
-        const fileName = "TEST_" + participantId + "_Session" + sessionNumber + "_Falling_Mid_ABCX.csv";
+        const fileName = "TEST_" + participantId + "_" + sessionNumber + "_Falling_ABCX.csv";
         
         const templateParams = {
             participant_id: participantId,
@@ -1822,7 +1935,8 @@ function testEmailSending() {
     }
 }
 
-function exportToCSV() {
+// 生成完整的CSV内容（供导出和邮件使用）
+function generateFullCSVContent() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
     const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
@@ -1966,12 +2080,24 @@ function exportToCSV() {
                      diffFromStandard.toFixed(2) + "," + rate.toFixed(4) + "," + slope.toFixed(6) + "," + foilsStr);
     }
     
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-    const encodedUri = encodeURI(csvContent);
+    return csvRows.join("\n");
+}
+
+function exportToCSV() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
+    const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
+    
+    const csvContent = generateFullCSVContent();
+    const dataUri = "data:text/csv;charset=utf-8," + csvContent;
+    const encodedUri = encodeURI(dataUri);
     const link = document.createElement("a");
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    
+    // 生成文件名格式：ID_SessionNumber_ExperimentName.csv
+    const fileName = participantId + "_" + sessionNumber + "_Falling_ABCX.csv";
+    
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "mid_falling_pitch_JND_ABCX_data_" + timestamp + ".csv");
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

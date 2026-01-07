@@ -357,20 +357,69 @@
             .container {
                 padding: 15px;
             }
+            .training-info {
+                font-size: 18px;
+            }
+            .instruction-text {
+                font-size: 16px;
+            }
+            .prompt-text {
+                font-size: 22px;
+            }
             .response-button {
                 width: 100px;
                 height: 100px;
-                font-size: 16px;
+                font-size: 18px;
                 margin: 8px 10px;
+            }
+            .control-button {
+                font-size: 20px;
+                padding: 12px 24px;
+            }
+            .status {
+                font-size: 20px;
+                width: 90%;
+            }
+            .debug-info {
+                font-size: 14px;
+            }
+            .result-heading {
+                font-size: 22px;
+            }
+            .result-table th, .result-table td {
+                font-size: 14px;
+                padding: 8px;
+            }
+            .auxiliary-buttons button {
+                font-size: 14px;
+            }
+            .experiment-progress {
+                font-size: 18px;
             }
         }
         
         @media (max-width: 600px) {
+            .training-info {
+                font-size: 16px;
+            }
+            .instruction-text {
+                font-size: 14px;
+            }
+            .prompt-text {
+                font-size: 20px;
+            }
             .response-button {
                 width: 80px;
                 height: 80px;
-                font-size: 14px;
+                font-size: 16px;
                 margin: 5px 8px;
+            }
+            .control-button {
+                font-size: 18px;
+                padding: 10px 20px;
+            }
+            .status {
+                font-size: 18px;
             }
         }
         
@@ -1938,93 +1987,20 @@ function sendLevelMidExperimentResults() {
     const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
     const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
     
-    const csvRows = [];
-    
-    csvRows.push("Participant ID: " + participantId);
-    csvRows.push("Session Number: " + sessionNumber);
-    csvRows.push("");
-    
-    const headers = [
-        "Trial Number", "Timestamp", "Direction", "Difficulty Level", 
-        "Semitone Value", "Foil Level", "Foil Semitone Value", 
-        "Level-Foil Distance", "X Matches Type", "Standard Position", 
-        "Level Position", "Foil Position", "User Response", 
-        "Correct Response", "Is Correct", "Reaction Time (ms)", 
-        "Is Reversal", "Step Direction"
-    ];
-    
-    csvRows.push(headers.join(","));
-    
-    trialRecords.forEach(function(trial) {
-        const row = [
-            trial.trialNumber, '"' + trial.timestamp + '"', trial.direction,
-            trial.difficultyLevel, trial.semitoneValue, trial.foilLevel,
-            trial.foilSemitoneValue, trial.levelToFoilDistance, trial.xMatchesType,
-            trial.standardPosition, trial.levelPosition, trial.foilPosition,
-            '"' + trial.userResponse + '"', '"' + trial.correctResponse + '"',
-            trial.isCorrect ? "1" : "0", trial.reactionTime,
-            trial.isReversal ? "1" : "0", '"' + trial.stepDirection + '"'
-        ];
-        csvRows.push(row.join(","));
-    });
-    
-    csvRows.push("\nRESULTS SUMMARY");
-    csvRows.push("\nThreshold Results (semitones)");
-    csvRows.push("Direction,Threshold,Standard Deviation,Assessment");
+    // 使用 generateFullCSVContent 生成完整的CSV内容
+    const csvContent = generateFullCSVContent();
     
     const hasHigherData = NumberOfReversals[0] >= MINIMUMREVERSALS;
     const hasLowerData = NumberOfReversals[1] >= MINIMUMREVERSALS;
     
-    csvRows.push("Higher," + 
-        (hasHigherData ? sentAverage[0].toFixed(4) : "Insufficient data") + "," + 
-        (hasHigherData ? sentStdev[0].toFixed(4) : "N/A") + "," + 
-        (hasHigherData ? getThresholdAssessment(sentAverage[0]) : "N/A"));
-    
-    csvRows.push("Lower," + 
-        (hasLowerData ? sentAverage[1].toFixed(4) : "Insufficient data") + "," + 
-        (hasLowerData ? sentStdev[1].toFixed(4) : "N/A") + "," + 
-        (hasLowerData ? getThresholdAssessment(sentAverage[1]) : "N/A"));
-    
-    if (hasHigherData && hasLowerData) {
-        const avgThreshold = (sentAverage[0] + sentAverage[1]) / 2;
-        const combinedVariance = (Math.pow(sentStdev[0], 2) + Math.pow(sentStdev[1], 2)) / 2;
-        const combinedSD = Math.sqrt(combinedVariance).toFixed(4);
-        
-        csvRows.push("Average," + avgThreshold.toFixed(4) + "," + combinedSD + "," + getThresholdAssessment(avgThreshold));
-    }
-    
     const rtStats = calculateReactionTimeStats();
-    csvRows.push("\nReaction Time Statistics (ms)");
-    csvRows.push("Direction,Mean,Median,Standard Deviation");
-    csvRows.push("Higher," + rtStats.higher.mean + "," + rtStats.higher.median + "," + rtStats.higher.sd);
-    csvRows.push("Lower," + rtStats.lower.mean + "," + rtStats.lower.median + "," + rtStats.lower.sd);
-    csvRows.push("Overall," + rtStats.overall.mean + "," + rtStats.overall.median + "," + rtStats.overall.sd);
-    
     const accuracyStats = calculateAccuracyStats();
-    csvRows.push("\nAccuracy Statistics");
-    csvRows.push("Direction,Correct Responses,Total Responses,Percentage");
-    csvRows.push("Higher," + accuracyStats.higher.correct + "," + accuracyStats.higher.total + "," + accuracyStats.higher.percentage + "%");
-    csvRows.push("Lower," + accuracyStats.lower.correct + "," + accuracyStats.lower.total + "," + accuracyStats.lower.percentage + "%");
-    csvRows.push("Overall," + accuracyStats.overall.correct + "," + accuracyStats.overall.total + "," + accuracyStats.overall.percentage + "%");
-    
-    csvRows.push("\nExperiment Parameters");
-    csvRows.push("Paradigm,ABCX (4-AFC)");
-    csvRows.push("Max Reversals," + MAXREVERSALS);
-    csvRows.push("Min Reversals for Calculation," + MINIMUMREVERSALS);
-    csvRows.push("Max Iterations," + MAXITERATIONS);
-    csvRows.push("Difficulty Levels,10 (from 2.0 to 0.03 semitones)");
-    csvRows.push("Adaptive Rule,2-down-1-up");
-    csvRows.push("Step Size,1 (uniform)");
-    csvRows.push("Max Repeat per Trial," + MAX_REPEAT_COUNT);
-    csvRows.push("Foil Selection Rule,Distance >= " + MIN_FOIL_DISTANCE + " levels");
-    
-    const csvContent = csvRows.join("\n");
     
     const BOM = '\uFEFF';
     const contentWithBOM = BOM + csvContent;
     const csvBase64 = btoa(unescape(encodeURIComponent(contentWithBOM)));
     
-    const fileName = participantId + "_Session" + sessionNumber + "_Level_Tone_ABCX.csv";
+    const fileName = participantId + "_" + sessionNumber + "_Level_Tone_ABCX.csv";
     
     let resultsSummary = "Level Tone Discrimination Results:\n";
     if (hasHigherData) {
@@ -2132,7 +2108,7 @@ function testEmailSending() {
         const csvContent = csvRows.join("\n");
         const BOM = '\uFEFF';
         const csvBase64 = btoa(unescape(encodeURIComponent(BOM + csvContent)));
-        const fileName = "TEST_" + participantId + "_Session" + sessionNumber + "_Level_Tone_ABCX.csv";
+        const fileName = "TEST_" + participantId + "_" + sessionNumber + "_Level_Tone_ABCX.csv";
         
         const templateParams = {
             participant_id: participantId,
@@ -2175,7 +2151,8 @@ function testEmailSending() {
     }
 }
 
-function exportToCSV() {
+// 生成完整的CSV内容（供导出和邮件使用）
+function generateFullCSVContent() {
     const urlParams = new URLSearchParams(window.location.search);
     const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
     const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
@@ -2271,12 +2248,24 @@ function exportToCSV() {
     csvRows.push("Max Repeat per Trial," + MAX_REPEAT_COUNT);
     csvRows.push("Foil Selection Rule,Distance >= " + MIN_FOIL_DISTANCE + " levels");
     
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-    const encodedUri = encodeURI(csvContent);
+    return csvRows.join("\n");
+}
+
+function exportToCSV() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const participantId = urlParams.get('participantId') || localStorage.getItem('participantId') || 'N/A';
+    const sessionNumber = urlParams.get('sessionNumber') || localStorage.getItem('sessionNumber') || 'N/A';
+    
+    const csvContent = generateFullCSVContent();
+    const dataUri = "data:text/csv;charset=utf-8," + csvContent;
+    const encodedUri = encodeURI(dataUri);
     const link = document.createElement("a");
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    
+    // 生成文件名格式：ID_SessionNumber_ExperimentName.csv
+    const fileName = participantId + "_" + sessionNumber + "_Level_Tone_ABCX.csv";
+    
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "pitch_discrimination_ABCX_data_" + timestamp + ".csv");
+    link.setAttribute("download", fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
