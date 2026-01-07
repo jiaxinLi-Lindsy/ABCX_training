@@ -1081,7 +1081,7 @@ function delay(ms) {
 
 function waitForAudioReady(audio, timeout) {
     return new Promise(function(resolve) {
-        timeout = timeout || 5000;
+        timeout = timeout || 8000;
         
         if (audio.readyState >= 3) {
             logDebug("Audio " + audio.id + " already buffered (readyState: " + audio.readyState + ")");
@@ -1092,22 +1092,49 @@ function waitForAudioReady(audio, timeout) {
         logDebug("Audio " + audio.id + " waiting for buffer (readyState: " + audio.readyState + ")");
         
         var resolved = false;
+        var retryCount = 0;
+        var maxRetries = 1; // 最多重试1次
         
         var onCanPlay = function() {
             if (!resolved) {
                 resolved = true;
                 audio.removeEventListener('canplaythrough', onCanPlay);
+                audio.removeEventListener('error', onError);
                 logDebug("Audio " + audio.id + " buffered and ready");
                 resolve();
             }
         };
         
+        var onError = function() {
+            if (!resolved && retryCount < maxRetries) {
+                retryCount++;
+                logDebug("Audio " + audio.id + " error during buffering, retrying (" + retryCount + "/" + maxRetries + ")...");
+                audio.removeEventListener('canplaythrough', onCanPlay);
+                audio.removeEventListener('error', onError);
+                
+                // 重新加载并重新监听
+                setTimeout(function() {
+                    audio.load();
+                    audio.addEventListener('canplaythrough', onCanPlay);
+                    audio.addEventListener('error', onError);
+                }, 1000);
+            } else if (!resolved) {
+                logDebug("Audio " + audio.id + " failed to buffer after retry, proceeding anyway");
+                resolved = true;
+                audio.removeEventListener('canplaythrough', onCanPlay);
+                audio.removeEventListener('error', onError);
+                resolve(); // 即使失败也继续，避免阻塞实验
+            }
+        };
+        
         audio.addEventListener('canplaythrough', onCanPlay);
+        audio.addEventListener('error', onError);
         
         setTimeout(function() {
             if (!resolved) {
                 resolved = true;
                 audio.removeEventListener('canplaythrough', onCanPlay);
+                audio.removeEventListener('error', onError);
                 logDebug("Audio " + audio.id + " buffer timeout, proceeding anyway");
                 resolve();
             }
@@ -1121,7 +1148,7 @@ function waitForAudioReady(audio, timeout) {
 
 function playAudioWithTimeout(audio, timeout) {
     return new Promise(function(resolve, reject) {
-        waitForAudioReady(audio, 3000).then(function() {
+        waitForAudioReady(audio, 8000).then(function() {
             var resolved = false;
             
             var timeoutMs = timeout || Math.max(3000, (audio.duration || 1) * 1000 + 2000);
@@ -2308,9 +2335,45 @@ window.onload = function() {
     var allAudios = document.querySelectorAll('audio');
     logDebug("Preloading " + allAudios.length + " audio files");
     
+    // 优化：只在音频未加载时才调用load()，避免重复加载
+    var loadingCount = 0;
+    var loadedCount = 0;
     allAudios.forEach(function(audio) {
-        audio.load();
+        // readyState: 0=HAVE_NOTHING, 1=HAVE_METADATA, 2=HAVE_CURRENT_DATA, 3=HAVE_FUTURE_DATA, 4=HAVE_ENOUGH_DATA
+        if (audio.readyState === 0) {
+            // 添加错误监听和重试机制
+            var retryCount = 0;
+            var maxRetries = 2;
+            
+            var handleError = function() {
+                retryCount++;
+                if (retryCount <= maxRetries) {
+                    logDebug("Audio " + audio.id + " load failed, retrying (" + retryCount + "/" + maxRetries + ")...");
+                    setTimeout(function() {
+                        audio.load();
+                    }, 1000 * retryCount); // 指数退避：1秒、2秒
+                } else {
+                    logDebug("Audio " + audio.id + " load failed after " + maxRetries + " retries");
+                }
+            };
+            
+            audio.addEventListener('error', handleError, { once: true });
+            audio.addEventListener('canplaythrough', function() {
+                loadedCount++;
+                logDebug("Audio " + audio.id + " loaded successfully (" + loadedCount + "/" + allAudios.length + ")");
+            }, { once: true });
+            
+            loadingCount++;
+            audio.load();
+        } else {
+            loadedCount++;
+            logDebug("Audio " + audio.id + " already loaded (readyState: " + audio.readyState + ")");
+        }
     });
+    
+    if (loadingCount > 0) {
+        logDebug("Started loading " + loadingCount + " audio files");
+    }
     
     document.getElementById('text1').value = "請點擊\"開始實驗\"";
     
